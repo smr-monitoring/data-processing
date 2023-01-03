@@ -22,9 +22,12 @@ Read in data
 ```{r}
 licor <- read_csv("raw_data/licor.csv")
 nep <- read_csv("raw_data/nep.csv")
-secchi <- read_csv("raw_data/secchi.csv")
-tss <- read_csv("raw_data/tss_calc.csv")
-ysi <- read_csv("raw_data/ysi.csv")
+secchi <- read_csv("raw_data/secchi.csv") %>%
+  select(sample_date, secchi_depth_m)
+tss <- read_csv("raw_data/tss_calc.csv") %>%
+  select(sample_date, mg_l_tss)
+ysi <- read_csv("raw_data/ysi.csv") %>%
+  select(-c(sample_time, sample_location, notes))
 ```
 
 Calculate kd from licor profiles
@@ -120,4 +123,13 @@ npp_avg <- npp %>%
                           name == "npp_g_c_m2_d" ~ "NPP",
                           name == "r_g_c_m2_d" ~ "R"),
          name = factor(name, levels = c("GPP", "R", "NPP")))
+```
+
+Save dataframes to .RData file
+```{r}
+save(kd, npp_avg, secchi, tss, ysi, file = "data_processed/water_qual_processed.RData")
+write_csv(kd, "data_processed/kd.csv")
+write_csv(npp_avg, "data_processed/npp_avg.csv")
+write_csv(secchi, "data_processed/secchi.csv")
+write_csv(ysi, "data_processed/ysi.csv")
 ```
