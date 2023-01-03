@@ -1,0 +1,123 @@
+---
+title: "Data processing"
+author: "Cassie Gurbisz"
+date: "1/3/2023"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Load packages
+```{r}
+library(tidyverse)
+library(broom)
+library(lubridate)
+library(purrr)
+library(suncalc)
+```
+
+Read in data
+```{r}
+licor <- read_csv("raw_data/licor.csv")
+nep <- read_csv("raw_data/nep.csv")
+secchi <- read_csv("raw_data/secchi.csv")
+tss <- read_csv("raw_data/tss_calc.csv")
+ysi <- read_csv("raw_data/ysi.csv")
+```
+
+Calculate kd from licor profiles
+```{r}
+lm_fun_par <- function(df) lm(-log(prop_air) ~ depth_m, data = df)
+
+mod_output_par <- licor %>%
+  select(sample_date, depth_m, prop_air) %>%
+  group_by(sample_date) %>%
+  nest() %>%
+  mutate(model = map(data, lm_fun_par),
+         tidied = map(model, tidy)) %>%
+  unnest(tidied) %>%
+  filter(term == "depth_m") %>%
+  rename(kd = estimate) %>%
+  filter(p.value <= 0.05, kd >= 0.0)
+
+kd <- mod_output_par[, c(1, 5)]
+```
+
+Calculate depth-integrated net primary production
+```{r}
+nppdat <- nep %>%
+  mutate(initial_datetime = ymd_hms(paste(initial_date, initial_time, sep = " ")),
+         final_datetime = ymd_hms(paste(final_date, final_time, sep = " ")),
+    time_change = as.numeric(final_datetime - initial_datetime),
+    do_change = final_do_mg_l - initial_do_mg_l,
+    do_rate_mg_l_h = do_change / time_change) %>%
+  select(initial_date, initial_datetime, final_datetime, replicate, depth, depth_m, treatment, do_rate_mg_l_h) %>%
+  pivot_wider(id_cols = c("initial_date", "initial_datetime","final_datetime", "replicate", "depth_m", "depth", "depth_m"), names_from = treatment, values_from = do_rate_mg_l_h) %>%
+  mutate(npp = light,
+         r = dark,
+         gpp = light - dark,
+         initial_date = ymd(initial_date)) %>%
+  select(-c(light, dark)) %>%
+  drop_na()
+```
+
+```{r}
+intfun <- function(dat) {
+  dat = arrange(dat, depth_m)
+  fxnnpp = approxfun(dat$depth_m, dat$npp)
+  fxngpp = approxfun(dat$depth_m, dat$gpp)
+  fxnr = approxfun(dat$depth_m, dat$r)
+  
+  fluxtable = tibble(initial_date = dat$initial_date[1],
+                   initial_datetime = dat$initial_datetime[1],
+                   final_datetime = dat$final_datetime[1],
+                   replicate = dat$replicate[1],
+                   npp_g_o2_m2_h = as.numeric(integrate(fxnnpp, min(dat$depth_m), max(dat$depth_m))[1]),
+                   gpp_g_o2_m2_h = as.numeric(integrate(fxngpp, min(dat$depth_m), max(dat$depth_m))[1]),
+                   r_g_o2_m2_h = as.numeric(integrate(fxnr, min(dat$depth_m), max(dat$depth_m))[1]))
+  
+    sun = getSunlightTimes(fluxtable$initial_date, lat = 38.189104, lon = -76.433362, 
+                           keep = c("sunrise" ,"sunset"), tz = "America/New_York") %>% 
+      mutate(daylight_h = as.numeric(sunset - sunrise)) %>%
+      select(date, daylight_h) %>%
+      mutate(initial_date = date)
+  
+  fluxtable <- left_join(fluxtable, sun) %>%
+    mutate(npp_g_c_m2_h = npp_g_o2_m2_h * 0.375,
+    gpp_g_c_m2_h = gpp_g_o2_m2_h * 0.375 / 1.3,
+    r_g_c_m2_h = r_g_o2_m2_h * 0.375,
+    npp_g_o2_m2_d = npp_g_o2_m2_h * daylight_h,
+    gpp_g_o2_m2_d = gpp_g_o2_m2_h * daylight_h,
+    r_g_o2_m2_d = r_g_o2_m2_h * 24,
+    npp_g_c_m2_d = npp_g_c_m2_h * daylight_h,
+    gpp_g_c_m2_d = gpp_g_c_m2_h * daylight_h,
+    r_g_c_m2_d = r_g_c_m2_h * 24)
+    
+  fluxtable
+}
+```
+
+Split by date and replicate
+```{r}
+nppsplit <- nppdat %>%
+  group_by(initial_date, replicate) %>%
+  group_split()
+```
+
+```{r}
+se <- function(x) sd(x, na.rm = TRUE) / sqrt(length(x))
+
+npp <- map_df(nppsplit, intfun)
+npp_avg <- npp %>%
+  select(date, replicate, npp_g_c_m2_d, gpp_g_c_m2_d, r_g_c_m2_d) %>%
+  pivot_longer(3:5) %>%
+  group_by(date, name) %>%
+  summarize(avg = mean(value, na.rm = TRUE),
+              stderr = se(value)) %>%
+  mutate(name = case_when(name == "gpp_g_c_m2_d" ~ "GPP",
+                          name == "npp_g_c_m2_d" ~ "NPP",
+                          name == "r_g_c_m2_d" ~ "R"),
+         name = factor(name, levels = c("GPP", "R", "NPP")))
+```
