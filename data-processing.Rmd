@@ -20,13 +20,13 @@ library(suncalc)
 
 Read in data
 ```{r}
-licor <- read_csv("raw_data/licor.csv")
-nep <- read_csv("raw_data/nep.csv")
-secchi <- read_csv("raw_data/secchi.csv") %>%
+licor <- read_csv("data_raw/licor.csv")
+nep <- read_csv("data_raw/nep.csv")
+secchi <- read_csv("data_raw/secchi.csv") %>%
   select(sample_date, secchi_depth_m)
-tss <- read_csv("raw_data/tss_calc.csv") %>%
+tss <- read_csv("data_raw/tss_calc.csv") %>%
   select(sample_date, mg_l_tss)
-ysi <- read_csv("raw_data/ysi.csv") %>%
+ysi <- read_csv("data_raw/ysi.csv") %>%
   select(-c(sample_time, sample_location, notes))
 ```
 
@@ -127,9 +127,9 @@ npp_avg <- npp %>%
 
 Save dataframes to .RData file
 ```{r}
-save(kd, npp_avg, secchi, tss, ysi, file = "data_processed/water_qual_processed.RData")
 write_csv(kd, "data_processed/kd.csv")
 write_csv(npp_avg, "data_processed/npp_avg.csv")
 write_csv(secchi, "data_processed/secchi.csv")
 write_csv(ysi, "data_processed/ysi.csv")
+write_csv(tss, "data_processed/tss.csv")
 ```
