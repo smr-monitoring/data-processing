@@ -129,6 +129,7 @@ Save dataframes to .RData file
 ```{r}
 write_csv(kd, "data_processed/kd.csv")
 write_csv(npp_avg, "data_processed/npp_avg.csv")
+write_csv(npp, "data_processed/npp.csv")
 write_csv(secchi, "data_processed/secchi.csv")
 write_csv(ysi, "data_processed/ysi.csv")
 write_csv(tss, "data_processed/tss.csv")
