@@ -63,7 +63,9 @@ nppdat <- nep %>%
          gpp = light - dark,
          initial_date = ymd(initial_date)) %>%
   select(-c(light, dark)) %>%
-  drop_na()
+  drop_na() %>%
+  mutate(depth_m = case_when(depth_m == 0.3 ~ 0.01,
+                             TRUE ~ depth_m))
 ```
 
 ```{r}
